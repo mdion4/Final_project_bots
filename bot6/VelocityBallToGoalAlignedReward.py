@@ -55,14 +55,17 @@ class VelocityBallToGoalAlignedReward(RewardFunction):
         unalignment = np.linalg.norm(diff)
         MAX_UNALIGNMENT = 0.7
         alignment_factor = 1.0 - min(unalignment, MAX_UNALIGNMENT) / MAX_UNALIGNMENT
+        print(f'Alignment factor: {alignment_factor}')
 
         # Calculate the velocity alignment reward
         velocity_alignment_reward = np.dot(
             ball_dir_to_goal_normalized, ball_vel
         ) / BALL_MAX_SPEED
+        print(f'velocity_alignment_reward: {velocity_alignment_reward}')
 
         # Combine and clamp to ensure non-negative reward
         reward = alignment_factor * velocity_alignment_reward
+        print(f'VelocityAligned reward: {reward}')
         reward = max(0.0, reward)
-
+        # print(f'VelocityAligned reward: {reward}')
         return reward

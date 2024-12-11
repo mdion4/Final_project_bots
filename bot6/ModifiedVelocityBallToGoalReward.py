@@ -32,6 +32,7 @@ class ModifiedVelocityBallToGoalReward(RewardFunction):
 
         # Compute alignment
         alignment = np.dot(ball_vel_dir, ball_to_goal_dir)
+        print(f'Modified velocity alignment: {alignment}')
         
         # Calculate the reward using minimum alignment
         # Change min_alignment (0 to 1) to adjust strictness
@@ -39,15 +40,19 @@ class ModifiedVelocityBallToGoalReward(RewardFunction):
         # 0 = not aligned at all
         alignment_clipped = max(0.0, alignment)
         reward = min(alignment_clipped, self.min_alignment) / self.min_alignment
+        print(f'Modified velocity alignment reward: {reward}')
 
         vel_towards_goal = np.dot(ball_vel, ball_to_goal_dir)
+        print(f'Modified velocity vel to goal: {vel_towards_goal}')
 
         # Compute the reward for velocity towards goal times the angle towards goal
         vel_reward = (vel_towards_goal / BALL_MAX_SPEED) ** 2
+        print(f'Modified velocity vel_reward: {vel_reward}')
         reward *= vel_reward
 
         # Ensure the reward is between 0 and 1
         reward = np.clip(reward, 0.0, 1.0)
+        print(f'Modified velocity reward: {reward}')
 
         return reward
     

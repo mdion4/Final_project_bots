@@ -3,15 +3,10 @@ from rlgym_sim.utils.gamestates import GameState, PlayerData
 from rlgym_ppo.util import MetricsLogger
 import os
 from rlgym_sim.utils import RewardFunction
-from rlgym_sim.utils.common_values import CAR_MAX_SPEED, CEILING_Z
-import rlgym_sim.utils.common_values as CommonValues
-from ModifiedVelocityBallToGoalReward import ModifiedVelocityBallToGoalReward
-from VelocityBallToGoalAlignedReward import VelocityBallToGoalAlignedReward
-from custom_combinedreward import LogCombinedReward
+from rlgym_sim.utils.common_values import CAR_MAX_SPEED
 
 
 
-KPH_TO_VEL = 250/9
 class ExampleLogger(MetricsLogger):
     def _collect_metrics(self, game_state: GameState) -> list:
         return [game_state.players[0].car_data.linear_velocity,
@@ -29,15 +24,6 @@ class ExampleLogger(MetricsLogger):
                   "z_vel":avg_linvel[2],
                   "Cumulative Timesteps":cumulative_timesteps}
         wandb_run.log(report)
-
-def get_most_recent_checkpoint() -> str:
-    checkpoint_load_dir = "data/checkpoints/"
-    checkpoint_load_dir += str(
-        max(os.listdir(checkpoint_load_dir), key=lambda d: int(d.split("-")[-1])))
-    checkpoint_load_dir += "/"
-    checkpoint_load_dir += str(
-        max(os.listdir(checkpoint_load_dir), key=lambda d: int(d)))
-    return checkpoint_load_dir        
 
 class InAirReward(RewardFunction): # We extend the class "RewardFunction"
     # Empty default constructor (required)
@@ -61,35 +47,6 @@ class InAirReward(RewardFunction): # We extend the class "RewardFunction"
         else:
             # We are on ground, don't give any reward
             return 0
-
-#from apollo-bot on RL-bot discord
-class TouchBallRewardScaledByHitForce(RewardFunction):
-    
-    def __init__(self):
-        super().__init__()
-        self.max_hit_speed = 130 * KPH_TO_VEL
-        self.last_ball_vel = None
-        self.cur_ball_vel = None
-
-    # game reset, after terminal condition
-    def reset(self, initial_state: GameState):
-        self.last_ball_vel = initial_state.ball.linear_velocity
-        self.cur_ball_vel = initial_state.ball.linear_velocity
-
-    # happens 
-    def pre_step(self, state: GameState):
-        self.last_ball_vel = self.cur_ball_vel
-        self.cur_ball_vel = state.ball.linear_velocity
-
-    def get_reward(self, player: PlayerData, state: GameState, previous_action: np.ndarray) -> float:
-        if player.ball_touched:
-            print(f'touchscaledhit: last vel:{self.last_ball_vel} cur_vel:{self.cur_ball_vel}')
-            reward = np.linalg.norm(self.cur_ball_vel - self.last_ball_vel) / self.max_hit_speed
-            print(f'TouchBallRewardScaledByHitForce: {reward}')
-            return reward
-        return 0
-    
-RAMP_HEIGHT = 256
 
 # Initially written by chatGPT o1-preview
 class TouchVelocityReward(RewardFunction):
@@ -118,7 +75,6 @@ class TouchVelocityReward(RewardFunction):
             ball_vel = state.ball.linear_velocity
             delta_vel = ball_vel - self.prev_ball_vel
             delta_speed = np.linalg.norm(delta_vel)
-            print(f'touchVelocityReward ball:{ball_vel} delta_vel:{delta_vel}, del_spd{delta_speed}')
 
             if delta_speed > self.min_velocity_change:
                 reward = delta_speed / CAR_MAX_SPEED
@@ -126,45 +82,6 @@ class TouchVelocityReward(RewardFunction):
                 self.cooldown_counter = self.cooldown_steps  # Activate cooldown
 
         self.prev_ball_vel = state.ball.linear_velocity
-        print(f'touchVelocityReward:{reward}')
-        return reward
-
-class AirTouchReward(RewardFunction):
-    MAX_TIME_IN_AIR = 1.75  # Maximum reasonable aerial time in seconds
-
-    def __init__(self):
-        super().__init__()
-        self.last_player_on_ground = True
-        self.air_time = 0.0
-
-    def reset(self, initial_state: GameState):
-        self.last_player_on_ground = True
-        self.air_time = 0.0
-
-    def get_reward(self, player: PlayerData, state: GameState, previous_action):
-        reward = 0.0
-
-        # Update air time
-        if not player.on_ground:
-            if self.last_player_on_ground:
-                # Player just left the ground
-                self.air_time = 0.0
-            self.air_time += (1/15)  # Increment air time
-            # print(f'airtime: {self.air_time}')
-        else:
-            self.air_time = 0.0  # Reset air time when on the ground
-
-        self.last_player_on_ground = player.on_ground
-
-        # Calculate fractions
-        air_time_frac = min(self.air_time, self.MAX_TIME_IN_AIR) / self.MAX_TIME_IN_AIR
-        height_frac = state.ball.position[2] / CommonValues.CEILING_Z
-
-        # Optional: Multiply by 1 if player touched the ball in the air
-        if player.ball_touched and not player.on_ground:
-            # Reward is the minimum of air time fraction and ball height fraction
-            reward = min(air_time_frac, height_frac)
-        print(f'AirTouchReward: {reward}')
         return reward
 
 class SaveBoostReward(RewardFunction):
@@ -227,31 +144,23 @@ def build_rocketsim_env():
     import rlgym_sim
     from lookup_act import LookupAction
     from rlgym_sim.utils.reward_functions import CombinedReward
-    from zero_sum_reward import ZeroSumReward
-    from rlgym_sim.utils.reward_functions.common_rewards import VelocityPlayerToBallReward,  \
+    from rlgym_sim.utils.reward_functions.common_rewards import VelocityPlayerToBallReward, VelocityBallToGoalReward, \
         EventReward, FaceBallReward
     from rlgym_sim.utils.obs_builders import DefaultObs
     from rlgym_sim.utils.terminal_conditions.common_conditions import NoTouchTimeoutCondition, GoalScoredCondition
     from rlgym_sim.utils import common_values
-    from necto_act import NectoAction
+    from rlgym_sim.utils.action_parsers import ContinuousAction
     from rlgym_sim.utils.state_setters import RandomState
-    from ball_goal_rewards import VelocityBallToGoalReward
     spawn_opponents = True
-    team_size = 2
+    team_size = 1
     game_tick_rate = 120
     tick_skip = 8
     step_time = 1/15
     timeout_seconds = 10
     timeout_ticks = int(round(timeout_seconds * game_tick_rate / tick_skip))
 
-    action_parser = NectoAction()
+    action_parser = LookupAction()
     terminal_conditions = [NoTouchTimeoutCondition(timeout_ticks), GoalScoredCondition()]
-
-    aggression_bias = 0.2
-    goal_reward = 1
-    concede_reward = - goal_reward * (1 - aggression_bias)
-
-    team_spirit = 0.01
 
     # rewards_to_combine = (SpeedTowardBallReward(),
     #                       InAirReward(),
@@ -264,23 +173,18 @@ def build_rocketsim_env():
     #                            reward_weights=reward_weights)
     reward_fn = CombinedReward.from_zipped(
         # Format is (func, weight)
-        # (TouchVelocityReward(min_velocity_change=500, cooldown_steps=10), 2),  # Reward strong touches
-        # (EventReward(touch = 1, team_goal=goal_reward, concede=concede_reward), 50), # put the ball in the net dummy
-        (ZeroSumReward(SpeedTowardBallReward(), team_spirit, 0.1), 2), # Move towards the ball!
-        (FaceBallReward(), 1), # Make sure we don't start driving backward at the ball
+        (TouchVelocityReward(min_velocity_change=500, cooldown_steps=10), 1.5),  # Reward strong touches
+        (EventReward(team_goal=1, concede =-1), 20), # Start farming the ball touch
+        (SpeedTowardBallReward(), 1), # Move towards the ball!
+        (FaceBallReward(), 0.5), # Make sure we don't start driving backward at the ball
         (InAirReward(), 0.015), # Make sure we don't forget how to jump
-        (ZeroSumReward(ModifiedVelocityBallToGoalReward(),team_spirit, 0.1), 5),
-        # (ZeroSumReward(VelocityBallToGoalAlignedReward(),team_spirit, 0.1), 5),
-        (ZeroSumReward(VelocityBallToGoalReward(), team_spirit, 0.1), 4), #discourage corners
-        (ZeroSumReward(TouchBallRewardScaledByHitForce(), team_spirit, 0.1), 50),
-        (ZeroSumReward(SaveBoostReward(),team_spirit, 0), 0.8),
-        (ZeroSumReward(AirTouchReward(),team_spirit, 0.1), 5)
+        (VelocityBallToGoalReward(), 5),
+        (SaveBoostReward(), 1)
         # (EventReward(touch=1), 50), # Giant reward for actually hitting the ball
         # (SpeedTowardBallReward(), 5), # Move towards the ball!
-        (FaceBallReward(), 1), # Make sure we don't start driving backward at the ball
+        # (FaceBallReward(), 1), # Make sure we don't start driving backward at the ball
         # (InAirReward(), 0.15)
     )
-
     obs_builder = DefaultObs(
         pos_coef=np.asarray([1 / common_values.SIDE_WALL_X, 1 / common_values.BACK_NET_Y, 1 / common_values.CEILING_Z]),
         ang_coef=1 / np.pi,
@@ -295,8 +199,6 @@ def build_rocketsim_env():
                          obs_builder=obs_builder,
                          action_parser=action_parser,
                          state_setter=state_setter)
-    
-
     import rocketsimvis_rlgym_sim_client as rsv
     type(env).render = lambda self: rsv.send_state_to_rocketsimvis(self._prev_state)
 
@@ -307,25 +209,18 @@ if __name__ == "__main__":
     from rlgym_ppo import Learner
     metrics_logger = ExampleLogger()
 
-    GAME_TICK_RATE = 120
-    TICK_SKIP = 8
-    STEP_TIME = (TICK_SKIP/GAME_TICK_RATE) #1/15
+    game_tick_rate = 120
+    tick_skip = 8
+    step_time = 1/(game_tick_rate/tick_skip) #1/15
 
-    gamespeed = STEP_TIME/2
     # 32 processes
-    n_proc = 70
-    try:
-        checkpoint_load_dir = get_most_recent_checkpoint()
-        print(f"Loading checkpoint: {checkpoint_load_dir}")
-    except:
-        print("checkpoint load dir not found.")
-        checkpoint_load_dir = None
+    n_proc = 42
+    latest_checkpoint_dir = "data/checkpoints/rlgym-ppo-run/" + str(max(os.listdir("data/checkpoints/rlgym-ppo-run"), key=lambda d: int(d)))
+    
     #use cmd line to render or not
     render = False
-    render_delay = False
     if len(sys.argv) > 1 and sys.argv[1].lower() == "true":
         render = True
-        render_delay = gamespeed/2
     
     # educated guess - could be slightly higher or lower
     min_inference_size = max(1, int(round(n_proc * 0.9)))
@@ -333,7 +228,7 @@ if __name__ == "__main__":
     learner = Learner(build_rocketsim_env,
                       n_proc=n_proc,
                       render=render,
-                      render_delay=render_delay,
+                      render_delay = step_time/4,
                       min_inference_size=min_inference_size,
                       metrics_logger=metrics_logger,
                       ppo_batch_size=50000,
@@ -344,19 +239,14 @@ if __name__ == "__main__":
                       ppo_epochs=3,
                       standardize_returns=True,
                       standardize_obs=False,
-                      policy_layer_sizes=(2048, 1024, 1024, 1024),
-                      critic_layer_sizes=(2048, 1024, 1024, 1024),
-                      policy_lr=4e-4,
-                      critic_lr=4e-4,
+                      policy_layer_sizes=(2048, 2048, 1024, 1024),
+                      critic_layer_sizes=(2048, 2048, 1024, 1024),
+                      policy_lr=2e-4,
+                      critic_lr=2e-4,
                       save_every_ts=50_000_000,
-                      n_checkpoints_to_keep= 100,
                       timestep_limit= 1_000_000_000_000,
                       log_to_wandb=True,
-                      wandb_run_name="bot6.1", # Name of your Weights And Biases run.
-                      wandb_project_name="2v2", # Name of your Weights And Biases project.
-                      wandb_group_name="final bots", # Name of the Weights And Biases project group.
-                      checkpoint_load_folder=checkpoint_load_dir,
-                    #   checkpoint_load_folder="data/checkpoints/rlgym-ppo-run/1187173094",
-                      add_unix_timestamp=True
+                      checkpoint_load_folder=latest_checkpoint_dir,
+                      add_unix_timestamp=False
                       )
     learner.learn()

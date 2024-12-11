@@ -3,9 +3,8 @@ from rlgym_sim.utils.gamestates import GameState, PlayerData
 from rlgym_ppo.util import MetricsLogger
 import os
 from rlgym_sim.utils import RewardFunction
-from rlgym_sim.utils.common_values import CAR_MAX_SPEED, CEILING_Z
-import rlgym_sim.utils.common_values as CommonValues
-from ModifiedVelocityBallToGoalReward import ModifiedVelocityBallToGoalReward
+from rlgym_sim.utils.common_values import CAR_MAX_SPEED
+
 
 
 class ExampleLogger(MetricsLogger):
@@ -49,94 +48,6 @@ class InAirReward(RewardFunction): # We extend the class "RewardFunction"
             # We are on ground, don't give any reward
             return 0
 
-# Initially written by chatGPT o1-preview
-class TouchVelocityReward(RewardFunction):
-    def __init__(self, min_velocity_change=300, cooldown_steps=5):
-        super().__init__()
-        self.prev_ball_vel = np.zeros(3)
-        # chatGPT v2
-        self.min_velocity_change = min_velocity_change  # Minimum speed change to reward
-        self.cooldown_steps = cooldown_steps
-        self.cooldown_counter = 0
-
-    def reset(self, initial_state: GameState):
-        self.prev_ball_vel = initial_state.ball.linear_velocity
-        self.cooldown_counter = 0
-
-    def get_reward(self, player: PlayerData, state: GameState, previous_action) -> float:
-        reward = 0.0
-
-        # Check if the player touched the ball since the last step
-        # originally if "player.ball_touched and not self.last_touch" 
-        # this did not promote dribbling or setting up hook shots.
-        if self.cooldown_counter > 0:
-            self.cooldown_counter -= 1
-
-        elif player.ball_touched:
-            ball_vel = state.ball.linear_velocity
-            delta_vel = ball_vel - self.prev_ball_vel
-            delta_speed = np.linalg.norm(delta_vel)
-
-            if delta_speed > self.min_velocity_change:
-                reward = delta_speed / CAR_MAX_SPEED
-                reward = min(reward, 1.0)
-                self.cooldown_counter = self.cooldown_steps  # Activate cooldown
-
-        self.prev_ball_vel = state.ball.linear_velocity
-        return reward
-
-class AirTouchReward(RewardFunction):
-    MAX_TIME_IN_AIR = 1.75  # Maximum reasonable aerial time in seconds
-
-    def __init__(self):
-        super().__init__()
-        self.last_player_on_ground = True
-        self.air_time = 0.0
-
-    def reset(self, initial_state: GameState):
-        self.last_player_on_ground = True
-        self.air_time = 0.0
-
-    def get_reward(self, player: PlayerData, state: GameState, previous_action):
-        reward = 0.0
-
-        # Update air time
-        if not player.on_ground:
-            if self.last_player_on_ground:
-                # Player just left the ground
-                self.air_time = 0.0
-            self.air_time += (1/15)  # Increment air time
-        else:
-            self.air_time = 0.0  # Reset air time when on the ground
-
-        self.last_player_on_ground = player.on_ground
-
-        # Calculate fractions
-        air_time_frac = min(self.air_time, self.MAX_TIME_IN_AIR) / self.MAX_TIME_IN_AIR
-        height_frac = state.ball.position[2] / CommonValues.CEILING_Z
-
-        # Reward is the minimum of air time fraction and ball height fraction
-        reward = min(air_time_frac, height_frac)
-
-        # Optional: Multiply by 1 if player touched the ball in the air
-        if player.ball_touched and not player.on_ground:
-            reward += 1  # Bonus reward for touching the ball in the air
-
-        return reward
-
-class SaveBoostReward(RewardFunction):
-    def __init__(self):
-        super().__init__()
-
-    # Do nothing on game reset
-    def reset(self, initial_state: GameState):
-        pass
-
-    # Get the reward for a specific player, at the current state
-    def get_reward(self, player: PlayerData, state: GameState, previous_action: np.ndarray) -> float:
-        reward = np.sqrt(player.boost_amount)
-        return reward
-    
 class SpeedTowardBallReward(RewardFunction):
     # Default constructor
     def __init__(self):
@@ -213,19 +124,10 @@ def build_rocketsim_env():
     #                            reward_weights=reward_weights)
     reward_fn = CombinedReward.from_zipped(
         # Format is (func, weight)
-        (TouchVelocityReward(min_velocity_change=500, cooldown_steps=10), 2),  # Reward strong touches
-        (EventReward(team_goal=1, concede =-1), 30), # put the ball in the net dummy
-        (SpeedTowardBallReward(), 1), # Move towards the ball!
-        (FaceBallReward(), 0.05), # Make sure we don't start driving backward at the ball
-        (InAirReward(), 0.015), # Make sure we don't forget how to jump
-        # # (ModifiedVelocityBallToGoalReward(), 1),
-        (VelocityBallToGoalReward(), 1), #discourage corners
-        (SaveBoostReward(), 1),
-        (AirTouchReward(), 5),
-        # (EventReward(touch=1), 50), # Giant reward for actually hitting the ball
-        # (SpeedTowardBallReward(), 5), # Move towards the ball!
-        # (FaceBallReward(), 1), # Make sure we don't start driving backward at the ball
-        # (InAirReward(), 0.15)
+        (EventReward(touch=1), 50), # Giant reward for actually hitting the ball
+        (SpeedTowardBallReward(), 5), # Move towards the ball!
+        (FaceBallReward(), 1), # Make sure we don't start driving backward at the ball
+        (InAirReward(), 0.15) # Make sure we don't forget how to jump
     )
     obs_builder = DefaultObs(
         pos_coef=np.asarray([1 / common_values.SIDE_WALL_X, 1 / common_values.BACK_NET_Y, 1 / common_values.CEILING_Z]),
@@ -247,31 +149,24 @@ def build_rocketsim_env():
     return env
 
 if __name__ == "__main__":
-    import sys
     from rlgym_ppo import Learner
     metrics_logger = ExampleLogger()
 
-    GAME_TICK_RATE = 120
-    TICK_SKIP = 8
-    STEP_TIME = (TICK_SKIP/GAME_TICK_RATE) #1/15
+    game_tick_rate = 120
+    tick_skip = 8
+    step_time = 1/(game_tick_rate/tick_skip) #1/15
 
-    gamespeed = STEP_TIME/2
     # 32 processes
     n_proc = 42
-    # latest_checkpoint_dir = "data/checkpoints/rlgym-ppo-run/" + str(max(os.listdir("data/checkpoints/rlgym-ppo-run"), key=lambda d: int(d)))
-    
-    #use cmd line to render or not
-    render = False
-    if len(sys.argv) > 1 and sys.argv[1].lower() == "true":
-        render = True
-    
+    latest_checkpoint_dir = "data/checkpoints/rlgym-ppo-run/" + str(max(os.listdir("data/checkpoints/rlgym-ppo-run"), key=lambda d: int(d)))
+
     # educated guess - could be slightly higher or lower
     min_inference_size = max(1, int(round(n_proc * 0.9)))
 
     learner = Learner(build_rocketsim_env,
                       n_proc=n_proc,
-                      render=render,
-                      render_delay=gamespeed/1.5,
+                      render=True,
+                      render_delay = step_time/4,
                       min_inference_size=min_inference_size,
                       metrics_logger=metrics_logger,
                       ppo_batch_size=50000,
@@ -279,20 +174,17 @@ if __name__ == "__main__":
                       exp_buffer_size=150000,
                       ppo_minibatch_size=50000,
                       ppo_ent_coef=0.01,
-                      ppo_epochs=4,
+                      ppo_epochs=3,
                       standardize_returns=True,
                       standardize_obs=False,
                       policy_layer_sizes=(2048, 2048, 1024, 1024),
                       critic_layer_sizes=(2048, 2048, 1024, 1024),
-                      policy_lr=0,
-                      critic_lr=3e-4,
-                      save_every_ts=50_000_000,
-                      n_checkpoints_to_keep= 100,
-                      timestep_limit= 1_000_000_000_000,
+                      policy_lr=2e-4,
+                      critic_lr=2e-4,
+                      save_every_ts=10_000_000,
+                      timestep_limit= 1_000_000_000,
                       log_to_wandb=True,
-                      wandb_run_name="bot4", # Name of your Weights And Biases run.
-                    #   checkpoint_load_folder=latest_checkpoint_dir,
-                      checkpoint_load_folder="data/checkpoints/rlgym-ppo-run/1187173094",
+                      checkpoint_load_folder=latest_checkpoint_dir,
                       add_unix_timestamp=False
                       )
     learner.learn()
