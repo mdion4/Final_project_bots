@@ -59,7 +59,7 @@ class VelocityBallToGoalReward(RewardFunction):
             norm_pos_diff = pos_diff / np.linalg.norm(pos_diff)
             norm_vel = vel / BALL_MAX_SPEED
             reward = float(np.dot(norm_pos_diff, norm_vel))
-            # print(f'VB2G: {reward}')
+            print(f'VB2G: {reward}')
             return reward
 
 

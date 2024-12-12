@@ -8,6 +8,7 @@ import rlgym_sim.utils.common_values as CommonValues
 from ModifiedVelocityBallToGoalReward import ModifiedVelocityBallToGoalReward
 from VelocityBallToGoalAlignedReward import VelocityBallToGoalAlignedReward
 
+KPH_TO_VEL = 250/9
 
 class ExampleLogger(MetricsLogger):
     def _collect_metrics(self, game_state: GameState) -> list:
@@ -246,8 +247,8 @@ def build_rocketsim_env():
         (FaceBallReward(), 0.5), # Make sure we don't start driving backward at the ball
         (InAirReward(), 0.015), # Make sure we don't forget how to jump
         # (ModifiedVelocityBallToGoalReward(), 1),
-        (VelocityBallToGoalAlignedReward(), 0.1),
-        # (VelocityBallToGoalReward(), 0.5), #discourage corners
+        # (VelocityBallToGoalAlignedReward(), 0.1),
+        (VelocityBallToGoalReward(), 0.5), #discourage corners
         (TouchBallRewardScaledByHitForce(), 2),
         (SaveBoostReward(), 1),
         (AirTouchReward(), 5)
@@ -286,13 +287,15 @@ if __name__ == "__main__":
 
     gamespeed = STEP_TIME/2
     # 32 processes
-    n_proc = 42
+    n_proc = 50
     latest_checkpoint_dir = "data/checkpoints/rlgym-ppo-run/" + str(max(os.listdir("data/checkpoints/rlgym-ppo-run"), key=lambda d: int(d)))
     
     #use cmd line to render or not
     render = False
+    render_delay = False
     if len(sys.argv) > 1 and sys.argv[1].lower() == "true":
         render = True
+        render_delay = gamespeed/1.5
     
     # educated guess - could be slightly higher or lower
     min_inference_size = max(1, int(round(n_proc * 0.9)))
@@ -313,14 +316,15 @@ if __name__ == "__main__":
                       standardize_obs=False,
                       policy_layer_sizes=(2048, 2048, 1024, 1024),
                       critic_layer_sizes=(2048, 2048, 1024, 1024),
-                      policy_lr=0,
-                      critic_lr=3e-4,
+                      policy_lr=2e-4,
+                      critic_lr=2e-4,
                       save_every_ts=50_000_000,
                       n_checkpoints_to_keep= 100,
                       timestep_limit= 1_000_000_000_000,
                       log_to_wandb=True,
+                      wandb_run_name="bot4 unfreeze policy", # Name of your Weights And Biases run.
                     #   checkpoint_load_folder=latest_checkpoint_dir,
-                      checkpoint_load_folder="data/checkpoints/rlgym-ppo-run/1187173094",
+                      checkpoint_load_folder="data/checkpoints/rlgym-ppo-run/1535757234",
                       add_unix_timestamp=True
                       )
     learner.learn()

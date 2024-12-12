@@ -83,13 +83,12 @@ class TouchBallRewardScaledByHitForce(RewardFunction):
 
     def get_reward(self, player: PlayerData, state: GameState, previous_action: np.ndarray) -> float:
         if player.ball_touched:
-            print(f'touchscaledhit: last vel:{self.last_ball_vel} cur_vel:{self.cur_ball_vel}')
+            # print(f'touchscaledhit: last vel:{self.last_ball_vel} cur_vel:{self.cur_ball_vel}')
             reward = np.linalg.norm(self.cur_ball_vel - self.last_ball_vel) / self.max_hit_speed
-            print(f'TouchBallRewardScaledByHitForce: {reward}')
+            # print(f'TouchBallRewardScaledByHitForce: {reward}')
             return reward
         return 0
     
-RAMP_HEIGHT = 256
 
 # Initially written by chatGPT o1-preview
 class TouchVelocityReward(RewardFunction):
@@ -118,7 +117,7 @@ class TouchVelocityReward(RewardFunction):
             ball_vel = state.ball.linear_velocity
             delta_vel = ball_vel - self.prev_ball_vel
             delta_speed = np.linalg.norm(delta_vel)
-            print(f'touchVelocityReward ball:{ball_vel} delta_vel:{delta_vel}, del_spd{delta_speed}')
+            # print(f'touchVelocityReward ball:{ball_vel} delta_vel:{delta_vel}, del_spd{delta_speed}')
 
             if delta_speed > self.min_velocity_change:
                 reward = delta_speed / CAR_MAX_SPEED
@@ -126,7 +125,7 @@ class TouchVelocityReward(RewardFunction):
                 self.cooldown_counter = self.cooldown_steps  # Activate cooldown
 
         self.prev_ball_vel = state.ball.linear_velocity
-        print(f'touchVelocityReward:{reward}')
+        # print(f'touchVelocityReward:{reward}')
         return reward
 
 class AirTouchReward(RewardFunction):
@@ -164,7 +163,7 @@ class AirTouchReward(RewardFunction):
         if player.ball_touched and not player.on_ground:
             # Reward is the minimum of air time fraction and ball height fraction
             reward = min(air_time_frac, height_frac)
-        print(f'AirTouchReward: {reward}')
+            # print(f'AirTouchReward: {reward}')
         return reward
 
 class SaveBoostReward(RewardFunction):
@@ -237,21 +236,22 @@ def build_rocketsim_env():
     from rlgym_sim.utils.state_setters import RandomState
     from ball_goal_rewards import VelocityBallToGoalReward
     spawn_opponents = True
-    team_size = 2
+    team_size = 1
     game_tick_rate = 120
     tick_skip = 8
     step_time = 1/15
     timeout_seconds = 10
     timeout_ticks = int(round(timeout_seconds * game_tick_rate / tick_skip))
 
-    action_parser = NectoAction()
+    action_parser = LookupAction()
     terminal_conditions = [NoTouchTimeoutCondition(timeout_ticks), GoalScoredCondition()]
 
     aggression_bias = 0.2
     goal_reward = 1
     concede_reward = - goal_reward * (1 - aggression_bias)
 
-    team_spirit = 0.01
+    team_spirit = 0.000
+    opp_penalty_scale = 0.00
 
     # rewards_to_combine = (SpeedTowardBallReward(),
     #                       InAirReward(),
@@ -264,21 +264,23 @@ def build_rocketsim_env():
     #                            reward_weights=reward_weights)
     reward_fn = CombinedReward.from_zipped(
         # Format is (func, weight)
-        # (TouchVelocityReward(min_velocity_change=500, cooldown_steps=10), 2),  # Reward strong touches
-        # (EventReward(touch = 1, team_goal=goal_reward, concede=concede_reward), 50), # put the ball in the net dummy
-        (ZeroSumReward(SpeedTowardBallReward(), team_spirit, 0.1), 2), # Move towards the ball!
+        (ZeroSumReward(TouchVelocityReward(min_velocity_change=500, cooldown_steps=10),team_spirit, opp_penalty_scale), 50),  # Reward strong touches
+        (EventReward(team_goal = goal_reward, concede=concede_reward), 50), # put the ball in the net dummy
+        
         (FaceBallReward(), 1), # Make sure we don't start driving backward at the ball
         (InAirReward(), 0.015), # Make sure we don't forget how to jump
-        (ZeroSumReward(ModifiedVelocityBallToGoalReward(),team_spirit, 0.1), 5),
+        # (ZeroSumReward(ModifiedVelocityBallToGoalReward(),team_spirit, 0.1), 5),
         # (ZeroSumReward(VelocityBallToGoalAlignedReward(),team_spirit, 0.1), 5),
-        (ZeroSumReward(VelocityBallToGoalReward(), team_spirit, 0.1), 4), #discourage corners
-        (ZeroSumReward(TouchBallRewardScaledByHitForce(), team_spirit, 0.1), 50),
-        (ZeroSumReward(SaveBoostReward(),team_spirit, 0), 0.8),
-        (ZeroSumReward(AirTouchReward(),team_spirit, 0.1), 5)
-        # (EventReward(touch=1), 50), # Giant reward for actually hitting the ball
+        (ZeroSumReward(VelocityBallToGoalReward(), team_spirit, opp_penalty_scale), 0.01), #discourage corners
+        # (ZeroSumReward(TouchBallRewardScaledByHitForce(), team_spirit, 0.1), 2),
+        # (ZeroSumReward(SaveBoostReward(),team_spirit, opp_penalty_scale), 0.01),
+        # (ZeroSumReward(AirTouchReward(),team_spirit, opp_penalty_scale), 0.01),
+        (ZeroSumReward(EventReward(touch=1), team_spirit, opp_penalty_scale),20), # Giant reward for actually hitting the ball
         # (SpeedTowardBallReward(), 5), # Move towards the ball!
-        (FaceBallReward(), 1), # Make sure we don't start driving backward at the ball
-        # (InAirReward(), 0.15)
+    #     (ZeroSumReward(EventReward(touch=1), team_spirit, opp_penalty_scale),50), # Giant reward for actually hitting the ball
+        (ZeroSumReward(SpeedTowardBallReward(), team_spirit, opp_penalty_scale), 5), # Move towards the ball!
+    #     (ZeroSumReward(FaceBallReward(), team_spirit, opp_penalty_scale), 1), # Make sure we don't start driving backward at the ball
+    #     (ZeroSumReward(InAirReward(),team_spirit, opp_penalty_scale), 0.015),
     )
 
     obs_builder = DefaultObs(
@@ -341,22 +343,22 @@ if __name__ == "__main__":
                       exp_buffer_size=150000,
                       ppo_minibatch_size=50000,
                       ppo_ent_coef=0.01,
-                      ppo_epochs=3,
+                      ppo_epochs=2,
                       standardize_returns=True,
                       standardize_obs=False,
                       policy_layer_sizes=(2048, 1024, 1024, 1024),
                       critic_layer_sizes=(2048, 1024, 1024, 1024),
-                      policy_lr=4e-4,
-                      critic_lr=4e-4,
+                      policy_lr=2e-4,
+                      critic_lr=2e-4,
                       save_every_ts=50_000_000,
                       n_checkpoints_to_keep= 100,
                       timestep_limit= 1_000_000_000_000,
                       log_to_wandb=True,
-                      wandb_run_name="bot6.1", # Name of your Weights And Biases run.
-                      wandb_project_name="2v2", # Name of your Weights And Biases project.
+                      wandb_run_name="bot8.0", # Name of your Weights And Biases run.
+                      wandb_project_name="1v1", # Name of your Weights And Biases project.
                       wandb_group_name="final bots", # Name of the Weights And Biases project group.
+                    #   checkpoint_load_folder=None,
                       checkpoint_load_folder=checkpoint_load_dir,
-                    #   checkpoint_load_folder="data/checkpoints/rlgym-ppo-run/1187173094",
                       add_unix_timestamp=True
                       )
     learner.learn()
