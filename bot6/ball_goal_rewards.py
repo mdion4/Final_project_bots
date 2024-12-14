@@ -23,9 +23,9 @@ class LiuDistanceBallToGoalReward(RewardFunction):
 
         # Compensate for moving objective to back of net
         dist = np.linalg.norm(state.ball.position - objective) - (BACK_NET_Y - BACK_WALL_Y + BALL_RADIUS)
-        print(f'LiuDist dist: {dist}')
+        # print(f'LiuDist dist: {dist}')
         reward = np.exp(-0.5 * dist / BALL_MAX_SPEED)  # Inspired by https://arxiv.org/abs/2105.12196
-        print(f'LiuDist reward: {reward}')
+        # print(f'LiuDist reward: {reward}')
         return reward
 
 

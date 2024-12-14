@@ -8,6 +8,7 @@ import rlgym_sim.utils.common_values as CommonValues
 from ModifiedVelocityBallToGoalReward import ModifiedVelocityBallToGoalReward
 from VelocityBallToGoalAlignedReward import VelocityBallToGoalAlignedReward
 from custom_combinedreward import LogCombinedReward
+from curriculum_reward import AnnealRewards
 
 
 
@@ -221,7 +222,27 @@ class SpeedTowardBallReward(RewardFunction):
             # Many good behaviors require moving away from the ball, so I highly recommend you don't punish moving away
             # We'll just not give any reward
             return 0
+class JumpTouchReward(RewardFunction):
+    """
+    a ball touch reward that only triggers when the agent's wheels aren't in contact with the floor
+    adjust minimum ball height required for reward with 'min_height' as well as reward scaling with 'exp'
+    """
 
+    def __init__(self, min_height=92, exp=0.2):
+        self.min_height = min_height
+        self.exp = exp
+
+    def reset(self, initial_state: GameState):
+        pass
+
+    def get_reward(
+            self, player: PlayerData, state: GameState, previous_action: np.ndarray
+            ) -> float:
+        if player.ball_touched and not player.on_ground and state.ball.position[2] >= self.min_height:
+            return ((state.ball.position[2] - 92) ** self.exp)-1
+
+        return 0
+    
 def build_rocketsim_env():
     import rlgym_sim
     from lookup_act import LookupAction
@@ -233,14 +254,14 @@ def build_rocketsim_env():
     from rlgym_sim.utils.terminal_conditions.common_conditions import NoTouchTimeoutCondition, GoalScoredCondition
     from rlgym_sim.utils import common_values
     from necto_act import NectoAction
-    from rlgym_sim.utils.state_setters import RandomState
-    from ball_goal_rewards import VelocityBallToGoalReward
+    from rlgym_sim.utils.state_setters import RandomState, DefaultState
+    from ball_goal_rewards import VelocityBallToGoalReward, LiuDistanceBallToGoalReward
     spawn_opponents = True
     team_size = 1
     game_tick_rate = 120
     tick_skip = 8
     step_time = 1/15
-    timeout_seconds = 10
+    timeout_seconds = 20
     timeout_ticks = int(round(timeout_seconds * game_tick_rate / tick_skip))
 
     action_parser = LookupAction()
@@ -262,26 +283,108 @@ def build_rocketsim_env():
 
     # reward_fn = CombinedReward(reward_functions=rewards_to_combine,
     #                            reward_weights=reward_weights)
-    reward_fn = CombinedReward.from_zipped(
+    rew1 = CombinedReward.from_zipped(
         # Format is (func, weight)
-        (ZeroSumReward(TouchVelocityReward(min_velocity_change=500, cooldown_steps=10),team_spirit, opp_penalty_scale), 50),  # Reward strong touches
-        (EventReward(team_goal = goal_reward, concede=concede_reward), 50), # put the ball in the net dummy
-        
-        (FaceBallReward(), 1), # Make sure we don't start driving backward at the ball
-        (InAirReward(), 0.015), # Make sure we don't forget how to jump
+        (ZeroSumReward(TouchVelocityReward(),team_spirit, opp_penalty_scale), 10),  # Reward strong touches
+        (SaveBoostReward(), 0.001),
+        # (AirTouchReward(), 0.01),
+        (JumpTouchReward(), 1),
+        (ZeroSumReward(EventReward(touch=1), team_spirit, opp_penalty_scale), 48), # Giant reward for actually hitting the ball
+        (LiuDistanceBallToGoalReward(), 0.25),
+        (SpeedTowardBallReward(), 3.5), # Move towards the ball!
+        (FaceBallReward(), 0.35), # Make sure we don't start driving backward at the ball
+        (InAirReward(), 0.15), # Make sure we don't forget how to jump
+        (VelocityBallToGoalReward(), 0.2), #discourage corners
+        # (ZeroSumReward(TouchBallRewardScaledByHitForce(), team_spirit, 0.1), 2),
+        # (EventReward(touch=1, team_goal = goal_reward, concede=concede_reward), 100), # put the ball in the net dummy
         # (ZeroSumReward(ModifiedVelocityBallToGoalReward(),team_spirit, 0.1), 5),
         # (ZeroSumReward(VelocityBallToGoalAlignedReward(),team_spirit, 0.1), 5),
-        (ZeroSumReward(VelocityBallToGoalReward(), team_spirit, opp_penalty_scale), 0.01), #discourage corners
-        # (ZeroSumReward(TouchBallRewardScaledByHitForce(), team_spirit, 0.1), 2),
-        # (ZeroSumReward(SaveBoostReward(),team_spirit, opp_penalty_scale), 0.01),
-        # (ZeroSumReward(AirTouchReward(),team_spirit, opp_penalty_scale), 0.01),
-        (ZeroSumReward(EventReward(touch=1), team_spirit, opp_penalty_scale),20), # Giant reward for actually hitting the ball
         # (SpeedTowardBallReward(), 5), # Move towards the ball!
     #     (ZeroSumReward(EventReward(touch=1), team_spirit, opp_penalty_scale),50), # Giant reward for actually hitting the ball
-        (ZeroSumReward(SpeedTowardBallReward(), team_spirit, opp_penalty_scale), 5), # Move towards the ball!
+        
     #     (ZeroSumReward(FaceBallReward(), team_spirit, opp_penalty_scale), 1), # Make sure we don't start driving backward at the ball
     #     (ZeroSumReward(InAirReward(),team_spirit, opp_penalty_scale), 0.015),
     )
+    rew2 = CombinedReward.from_zipped(
+        (ZeroSumReward(TouchVelocityReward(),team_spirit, 0.5), 5),  # Reward strong touches
+        (SaveBoostReward(), 0.8),
+        (AirTouchReward(), 1),
+        (JumpTouchReward(), 3),
+        (EventReward(touch=0.02, team_goal=goal_reward, concede=concede_reward), 30), # Giant reward for actually hitting the ball
+        (ZeroSumReward(LiuDistanceBallToGoalReward(),team_spirit, 0.5), 0.5),
+        (SpeedTowardBallReward(), 1), # Move towards the ball!
+        (FaceBallReward(), 0.2), # Make sure we don't start driving backward at the ball
+        (InAirReward(), 0.15), # Make sure we don't forget how to jump
+        (VelocityBallToGoalReward(), 0.2), #discourage corners
+    )
+    rew3 = CombinedReward.from_zipped(
+        (ZeroSumReward(TouchVelocityReward(),team_spirit, 1), 3),  # Reward strong touches
+        (SaveBoostReward(), 0.8),
+        (AirTouchReward(), 3),
+        (JumpTouchReward(), 5),
+        (EventReward(team_goal=goal_reward, concede=concede_reward), 100), # Giant reward for actually hitting the ball
+        (ZeroSumReward(LiuDistanceBallToGoalReward(),team_spirit, 1), 0.5),
+        (SpeedTowardBallReward(), 1), # Move towards the ball!
+        (FaceBallReward(), 0.2), # Make sure we don't start driving backward at the ball
+        (InAirReward(), 0.15), # Make sure we don't forget how to jump
+        (VelocityBallToGoalReward(), 0.2), #discourage corners
+    )
+    rew4 = CombinedReward.from_zipped(
+        (ZeroSumReward(TouchVelocityReward(),team_spirit, 1), 3),  # Reward strong touches
+        (SaveBoostReward(), 1),
+        (AirTouchReward(), 5),
+        (JumpTouchReward(), 5),
+        (EventReward(team_goal=goal_reward, concede=concede_reward), 200), # Giant reward for actually hitting the ball
+        (ZeroSumReward(LiuDistanceBallToGoalReward(),team_spirit, 1), 0.5),
+        (SpeedTowardBallReward(), 0.8), # Move towards the ball!
+        (FaceBallReward(), 0.2), # Make sure we don't start driving backward at the ball
+        (InAirReward(), 0.15), # Make sure we don't forget how to jump
+        (VelocityBallToGoalReward(), 0.2), #discourage corners
+        
+    )
+    rew5 = CombinedReward.from_zipped(
+        (ZeroSumReward(TouchVelocityReward(),team_spirit, 1), 3),  # Reward strong touches
+        (SaveBoostReward(), 1),
+        (AirTouchReward(), 5),
+        (JumpTouchReward(), 5),
+        (EventReward(team_goal=goal_reward, concede=concede_reward), 300), # Giant reward for actually hitting the ball
+        (ZeroSumReward(LiuDistanceBallToGoalReward(),team_spirit, 1), 0.1),
+        (SpeedTowardBallReward(), 0.5), # Move towards the ball!
+        (FaceBallReward(), 0.05), # Make sure we don't start driving backward at the ball
+        (InAirReward(), 0.015), # Make sure we don't forget how to jump
+        (VelocityBallToGoalReward(), 0.1), #discourage corners
+        # (ModifiedVelocityBallToGoalReward(), 0.1),
+    )
+    rew6 = CombinedReward.from_zipped(
+        (ZeroSumReward(TouchVelocityReward(),team_spirit, 1), 1),  # Reward strong touches
+        (SaveBoostReward(), 1),
+        (AirTouchReward(), 5),
+        (JumpTouchReward(350), 5),
+        (EventReward(team_goal=goal_reward, concede=concede_reward, demo=0.003), 300), # Giant reward for actually hitting the ball
+        (ZeroSumReward(LiuDistanceBallToGoalReward(),team_spirit, 1), 0.1),
+        (SpeedTowardBallReward(), 0.2), # Move towards the ball!
+        (FaceBallReward(), 0.05), # Make sure we don't start driving backward at the ball
+        (InAirReward(), 0.005), # Make sure we don't forget how to jump
+        (VelocityBallToGoalReward(), 0.1), #discourage corners
+    )
+    rew7 = CombinedReward.from_zipped(
+        (ZeroSumReward(TouchVelocityReward(),team_spirit, 1), 1),  # Reward strong touches
+        (SaveBoostReward(), 1.2),
+        (AirTouchReward(), 5),
+        (JumpTouchReward(350), 5),
+        (EventReward(team_goal=goal_reward, concede=concede_reward, demo=0.003), 300), # Giant reward for actually hitting the ball
+        (ZeroSumReward(LiuDistanceBallToGoalReward(),team_spirit, 1), 0.10),
+        (SpeedTowardBallReward(), 0.2), # Move towards the ball!
+        (FaceBallReward(), 0.05), # Make sure we don't start driving backward at the ball
+        (InAirReward(), 0.010), # Make sure we don't forget how to jump
+        (VelocityBallToGoalReward(), 0.1), #discourage corners
+    )
+    reward_fn = AnnealRewards(rew1, 150_000_000, rew2)
+    reward_fn = AnnealRewards(rew2, 300_000_000, rew3)
+    reward_fn = AnnealRewards(rew3, 100_000_000, rew4)
+    reward_fn = AnnealRewards(rew4, 100_000_000, rew5)
+    reward_fn = AnnealRewards(rew5, 100_000_000, rew6)
+    reward_fn = AnnealRewards(rew6, 100_000_000, rew7)
 
     obs_builder = DefaultObs(
         pos_coef=np.asarray([1 / common_values.SIDE_WALL_X, 1 / common_values.BACK_NET_Y, 1 / common_values.CEILING_Z]),
@@ -289,6 +392,7 @@ def build_rocketsim_env():
         lin_vel_coef=1 / common_values.CAR_MAX_SPEED,
         ang_vel_coef=1 / common_values.CAR_MAX_ANG_VEL)
     state_setter = RandomState(True, True, False)
+    state_setter = DefaultState()
     env = rlgym_sim.make(tick_skip=tick_skip,
                          team_size=team_size,
                          spawn_opponents=spawn_opponents,
@@ -327,7 +431,7 @@ if __name__ == "__main__":
     render_delay = False
     if len(sys.argv) > 1 and sys.argv[1].lower() == "true":
         render = True
-        render_delay = gamespeed/2
+        render_delay = gamespeed/1.3
     
     # educated guess - could be slightly higher or lower
     min_inference_size = max(1, int(round(n_proc * 0.9)))
@@ -338,23 +442,23 @@ if __name__ == "__main__":
                       render_delay=render_delay,
                       min_inference_size=min_inference_size,
                       metrics_logger=metrics_logger,
-                      ppo_batch_size=50000,
-                      ts_per_iteration=50000,
-                      exp_buffer_size=150000,
+                      ppo_batch_size=300000,
+                      ts_per_iteration=300000,
+                      exp_buffer_size=900000,
                       ppo_minibatch_size=50000,
                       ppo_ent_coef=0.01,
-                      ppo_epochs=2,
+                      ppo_epochs=3,
                       standardize_returns=True,
                       standardize_obs=False,
                       policy_layer_sizes=(2048, 1024, 1024, 1024),
                       critic_layer_sizes=(2048, 1024, 1024, 1024),
-                      policy_lr=2e-4,
-                      critic_lr=2e-4,
+                      policy_lr=0.8e-4,
+                      critic_lr=0.8e-4,
                       save_every_ts=50_000_000,
                       n_checkpoints_to_keep= 100,
                       timestep_limit= 1_000_000_000_000,
                       log_to_wandb=True,
-                      wandb_run_name="bot8.0", # Name of your Weights And Biases run.
+                      wandb_run_name="bot8.3.1", # Name of your Weights And Biases run.
                       wandb_project_name="1v1", # Name of your Weights And Biases project.
                       wandb_group_name="final bots", # Name of the Weights And Biases project group.
                     #   checkpoint_load_folder=None,
