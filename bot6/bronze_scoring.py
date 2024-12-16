@@ -385,6 +385,7 @@ def build_rocketsim_env():
     reward_fn = AnnealRewards(rew4, 100_000_000, rew5)
     reward_fn = AnnealRewards(rew5, 100_000_000, rew6)
     reward_fn = AnnealRewards(rew6, 100_000_000, rew7)
+    reward_fn = rew7
 
     obs_builder = DefaultObs(
         pos_coef=np.asarray([1 / common_values.SIDE_WALL_X, 1 / common_values.BACK_NET_Y, 1 / common_values.CEILING_Z]),
@@ -431,7 +432,7 @@ if __name__ == "__main__":
     render_delay = False
     if len(sys.argv) > 1 and sys.argv[1].lower() == "true":
         render = True
-        render_delay = gamespeed/1.3
+        render_delay = gamespeed/1.2
     
     # educated guess - could be slightly higher or lower
     min_inference_size = max(1, int(round(n_proc * 0.9)))
