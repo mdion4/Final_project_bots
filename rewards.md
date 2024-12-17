@@ -43,9 +43,20 @@ reward_fn = CombinedReward.from_zipped(
 As the name implies, a reward for one bot is a penalty for the opposing bot. Zero sum reward wraps a reward function, and uses team_spirit and opp_penalty to scale the rewards. team_spirit distributes rewards amongst teammates, a value of 0 means individuals do not share with teammates and keep the entire reward for themselves; a value of 1 means the reward is shared comepletly. Opp_penalty is a scalar usually between 0 and 1 dictating how much penalty to incur. It is only truly ZeroSum if opp penalty is 1, where the average reward for some reward function is 0. This is good to wrap around functions that deal with things the bot should be trying to prevent the opponent from doing, like touching the ball, having speed, having boost. It doesnt make as much sense for things like being in the air, facing the ball. I would suggest starting the opp_penalty low to start, then slowly increase as training goes on. Too much noise is bad for the bot in the early stages while it is still confused.
 
 
-###**AnnealingRewards**
+### **AnnealingRewards**
 I believe this to be the most crucial part of training a bot beyond the inital ballchading stage. AnnealRewards is also a wrapper function that linearly transitions between two or more reward functions over some number of steps. The pattern goes (rew1, num_steps_1_to_2, rew2, num_steps_2_to_3, etc). Unfortunately the intermediate reward functions arent saved anywhere, so if training ends before completing all the steps, you either have to revert to the checkpoint before calling AnnealRewards, or try calculating what the current reward function would be. Calculating wrong is highly likely to just break your bot. Even freezing the policy(setting policy_lr = 0) and allowing the critic to learn the new rewards is unlikely to keep your bot from breaking upon unfreezing the policy. 
 
-I suggest having many iterations of your combined reward function, and only use AnnealRewards() to go from 1 version to another, as you only know the current reward functions used by the bot at either end of AnnealRewards(). Once the goal reward function is reached, training will continue using that reward function.
+I suggest having many iterations of your combined reward function, and only use AnnealRewards() to go from 1 version to another, as you only know the current reward functions used by the bot at either end of AnnealRewards(). Once the goal reward function is reached, training will continue using that reward function. So now its safe to quit training and visualize your bot, making sure to change your reward function from AnnealReward to just the reward function you ended on.
+
+Here is an example of what it might look like after multiple iterations. Some were longer than others as the changes were bigger and you dont want to shock the bot.
+```py
+    reward_fn = AnnealRewards(rew1, 150_000_000, rew2)
+    reward_fn = AnnealRewards(rew2, 300_000_000, rew3)
+    reward_fn = AnnealRewards(rew3, 100_000_000, rew4)
+    reward_fn = AnnealRewards(rew4, 100_000_000, rew5)
+    reward_fn = AnnealRewards(rew5, 100_000_000, rew6)
+    reward_fn = AnnealRewards(rew6, 100_000_000, rew7)
+    reward_fn = rew7
+```
 
 
