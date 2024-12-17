@@ -1,4 +1,4 @@
-            - name: Check Spelling
+- name: Check Spelling
   # You may pin to the exact commit or the version.
   # uses: check-spelling/check-spelling@67debf50669c7fc76fc8f5d7f996384535a72b77
   uses: check-spelling/check-spelling@v0.0.24
