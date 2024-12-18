@@ -1,8 +1,0 @@
-{"time":"2024-12-09T17:11:42.60814-05:00","level":"INFO","msg":"using version","core version":"0.18.7"}
-{"time":"2024-12-09T17:11:42.60814-05:00","level":"INFO","msg":"created symlink","path":"C:\\Users\\matt\\Documents\\Mason\\2024\\CS485\\Final_project_bots\\bot6\\wandb\\run-20241209_171142-4fostfih\\logs\\debug-core.log"}
-{"time":"2024-12-09T17:11:42.7201666-05:00","level":"INFO","msg":"created new stream","id":"4fostfih"}
-{"time":"2024-12-09T17:11:42.7201666-05:00","level":"INFO","msg":"stream: started","id":"4fostfih"}
-{"time":"2024-12-09T17:11:42.7201666-05:00","level":"INFO","msg":"writer: Do: started","stream_id":"4fostfih"}
-{"time":"2024-12-09T17:11:42.7201666-05:00","level":"INFO","msg":"sender: started","stream_id":"4fostfih"}
-{"time":"2024-12-09T17:11:42.7201666-05:00","level":"INFO","msg":"handler: started","stream_id":"4fostfih"}
-{"time":"2024-12-09T17:11:42.9142947-05:00","level":"INFO","msg":"Starting system monitor"}
