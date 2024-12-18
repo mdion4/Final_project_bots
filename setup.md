@@ -1,30 +1,67 @@
-## Setting up Environments
+# Setting up Environments
 - **Things you need**
   - Rocket League on Epic or Steam
   - Bakkesmod from https://bakkesplugins.com/
   - RLbot from https://rlbot.org/
   - A decent computer
   - A venv with python 3.9
-- **Setup Guides**
-  - Follow the steps from this Wonderful PPO guide https://github.com/ZealanL/RLGym-PPO-Guide/blob/main/intro.md
-  This details Setting up Python, Git, RLGym-PPO, RocketSim, rlgym_sim, getting the Rocket League collision maps, PyTorch install for CUDA, and having an example bot set up
+- ## **Setup Guides**
+  - Follow the steps from this Wonderful PPO guide https://github.com/ZealanL/RLGym-PPO-Guide/blob/main/intro.md.
+  This details Setting up Python, Git, RLGym-PPO, RocketSim, rlgym_sim, getting the Rocket League collision maps, PyTorch install for CUDA, and having an example bot set up.
 
+  **Visualizer**
   - You will need to be able to visualize your bots behavior to see its progress. Follow this guide to set up an easy to use visualizer https://github.com/ZealanL/RocketSimVis
   - More details on using this will be provided in the learner section.
 
+  **RLBot**
   - This allows your bot to train in a simulated environment, but how do you actually use it in a match? RLBot loads the bot into Rocket League.
-  - The steps to convert a PPO sim trained bot to one that runs in RLBot will covered later once you are more familiar with the components that make up the bot.
+  - Follow the steps in this guide to translate the bot to work in RLBot https://github.com/ZealanL/RLGym-PPO-RLBot-Example
+
+  - Make sure to use the same obs_builder values as we did in training
+    ```py
+    #in bot.py
+    #in __init__
+    self.obs_builder = obs_builder = YourOBS(
+        pos_coef=np.asarray([1 / 4096, 1 / 6000, 1 / 2044]),
+        ang_coef=1 / np.pi,
+        lin_vel_coef=1 / 2300,
+        ang_vel_coef=1 / 5.5)
+    ```
+  - This all assumes you are using LookupAct or NectoAct
+  - In RLBot, I had to click on the menu and select "install missing packages" and type gym.
+  - Add the following line to bot.cfg under [Locations] `looks_config = ./appearance.cfg` 
+  - In agent.py replace the act function with this 
+    ```py
+    def act(self, state):
+      with torch.no_grad():
+        action_idx, probs = self.policy.get_action(state, True)
+      
+      action = np.array(self.action_parser.parse_actions([action_idx], None))
+      if len(action.shape) == 2:
+        if action.shape[0] == 1:
+          action = action[0]
+      
+      if len(action.shape) != 1:
+        raise Exception("Invalid action:", action)
+      
+      return action
+    ```      
+  - In your_act.py add (not relplace) this:
+      ```py
+      def parse_actionss(self, action: int, state) -> np.ndarray:
+        return self._lookup_table[action]
+      ```  
 
 ## Example Bot
 After following the first PPO guide, you'll have an example bot thats ready to train. You run it by navigating to the folder where example.py is via the command line, then type example.py. This starts the training, and will output each iteration report at regular intervals which include the following metrics (and more advanced ML stuff):
-  - **Policy Reward**:
-  - **Value Function Loss**:
-  - **SB3 Clip Fraction**:
-  - **Collected Steps per second**:
-  - **Overall Steps per second**:
-  - **Timestep collection Time**:
-  - **Timestep Consumption Time**:
-  - **Cumulative Timesteps**:
+  - **Policy Reward**: Average reward among all episodes in that iteration. Don't freak out when this starts going down as you pull back form dense rewards and increase sparse, ZeroSumRewards.
+  - **Value Function Loss**: This should be trending down to indicate improvement in the critic. The specific value is less important. This is like a measure of accuracy for the critic to predict the value function.
+  - **SB3 Clip Fraction**: This should typically be kept around 0.1 to 0.08 by adjusting the learning rate.
+  - **Collected Steps per second**: How many steps were collected (not yet processed) per second.
+  - **Overall Steps per second**: Number of steps processed per second. This is what is being referred to by SPS.
+  - **Timestep collection Time**: How long it took to collect all the steps in the iteration. A higher ts_per_iteration means this will take longer, as the goal is farther away.
+  - **Timestep Consumption Time**: How long it took do finish analyzing/ learning from the data set. More data, more epochs, more timesteps, all increase this.
+  - **Cumulative Timesteps**: Total number of time steps, can be used to calculated how much time the bot has experienced training. This is the number of steps the gets referred to when talking about some number of steps, like how my bot trained for 2 billion steps.
 
 **Logging**
 The ExampleLogger() extends MetricsLogger which sends data to wandb which handles the graphing. Look at https://github.com/ZealanL/RLGym-PPO-Guide/blob/main/graphs.md for more information on wandb (Weights and Biases) and the graphs there.
@@ -104,5 +141,5 @@ The Learner() class is what controls the learning loop and is home to most of ou
     
 
 ## Now check out learner.md or rewards.md
-learner.md
-rewards.md
+# [learner.md](learner.md)
+# [rewards.md](rewards.md)
