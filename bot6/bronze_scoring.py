@@ -287,23 +287,14 @@ def build_rocketsim_env():
         # Format is (func, weight)
         (ZeroSumReward(TouchVelocityReward(),team_spirit, opp_penalty_scale), 10),  # Reward strong touches
         (SaveBoostReward(), 0.001),
-        # (AirTouchReward(), 0.01),
+        (AirTouchReward(), 0.01),
         (JumpTouchReward(), 1),
         (ZeroSumReward(EventReward(touch=1), team_spirit, opp_penalty_scale), 48), # Giant reward for actually hitting the ball
         (LiuDistanceBallToGoalReward(), 0.25),
         (SpeedTowardBallReward(), 3.5), # Move towards the ball!
         (FaceBallReward(), 0.35), # Make sure we don't start driving backward at the ball
         (InAirReward(), 0.15), # Make sure we don't forget how to jump
-        (VelocityBallToGoalReward(), 0.2), #discourage corners
-        # (ZeroSumReward(TouchBallRewardScaledByHitForce(), team_spirit, 0.1), 2),
-        # (EventReward(touch=1, team_goal = goal_reward, concede=concede_reward), 100), # put the ball in the net dummy
-        # (ZeroSumReward(ModifiedVelocityBallToGoalReward(),team_spirit, 0.1), 5),
-        # (ZeroSumReward(VelocityBallToGoalAlignedReward(),team_spirit, 0.1), 5),
-        # (SpeedTowardBallReward(), 5), # Move towards the ball!
-    #     (ZeroSumReward(EventReward(touch=1), team_spirit, opp_penalty_scale),50), # Giant reward for actually hitting the ball
-        
-    #     (ZeroSumReward(FaceBallReward(), team_spirit, opp_penalty_scale), 1), # Make sure we don't start driving backward at the ball
-    #     (ZeroSumReward(InAirReward(),team_spirit, opp_penalty_scale), 0.015),
+        (VelocityBallToGoalReward(), 0.2), 
     )
     rew2 = CombinedReward.from_zipped(
         (ZeroSumReward(TouchVelocityReward(),team_spirit, 0.5), 5),  # Reward strong touches
@@ -315,7 +306,7 @@ def build_rocketsim_env():
         (SpeedTowardBallReward(), 1), # Move towards the ball!
         (FaceBallReward(), 0.2), # Make sure we don't start driving backward at the ball
         (InAirReward(), 0.15), # Make sure we don't forget how to jump
-        (VelocityBallToGoalReward(), 0.2), #discourage corners
+        (VelocityBallToGoalReward(), 0.2),
     )
     rew3 = CombinedReward.from_zipped(
         (ZeroSumReward(TouchVelocityReward(),team_spirit, 1), 3),  # Reward strong touches
