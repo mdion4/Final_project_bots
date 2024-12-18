@@ -171,7 +171,7 @@
   I will also be attempting more custom reward functions for the 1v1 bot, now that I know what works.
 
 ## Conclusion
-  While I was unable to beat the rookie bots in a 2v2 match, I did beat 3 out of 5 of the community baseline bots. I did not attempt level 4 due to the How close the level 3 results were. I did blow past Many intermediate mile stones. Getting the bot to push the ball around was the first suggested milestone, and that was achieved almost immediately, and instilled a false sense of confidence toward the rest of the challenge. My hand was held up until that point. Once things weren't so clearly laid out I certainly struggled for a long time, suffering brain death after brain death.  
+  While I was unable to beat the rookie bots in a 2v2 match, I did beat 3 out of 5 of the community baseline bots. I did not attempt level 4 due to how close the level 3 results were. I did blow past many intermediate milestones. Getting the bot to push the ball around was the first suggested milestone, and that was achieved almost immediately, and instilled a false sense of confidence toward the rest of the challenge. My hand was held up until that point. Once things weren't so clearly laid out I certainly struggled for a long time, suffering brain death after brain death.  
   
   I did achieve all original intermediate milestones, touching the ball, scoring, moving well (fast and in right direction). An earlier bot, bot 4 had discovered wavedashes on its own. Of the revised goals, I was able to score consistently, shadow defend well, exhibit some behaviors that are better than human at a similar level like patience, dribble with the ball on the ground, make baby aerials. My only failure is not doing this in 2v2 as originally intended.
 
